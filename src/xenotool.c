@@ -28,7 +28,7 @@ extern bool dbgflags[256];
 void usage() {
     puts("Usage: xenotool [options] file...");
     puts("Options:");
-    puts("  -w            Write to file(s)");
+    puts("  -s            Simulate without writing to file(s)");
     return;
 }
 
@@ -155,6 +155,12 @@ void save_obj(char *obj_filename, char *mtl_filename, Model *m) {
 }
 
 void save_glb(char *glb_filename, char *xtx_filename, Model *m) {
+    FILE *fp = fopen(glb_filename, "wb");
+    if(!fp) {
+        printf("Failed to open file for saving: \"%s\"\n", glb_filename);
+        return;
+    }
+    printf("Saving \"%s\"\n", glb_filename);
     char tex_rgb[256];
     char tex_pal[256];
     if(xtx_filename) {
@@ -472,8 +478,6 @@ void save_glb(char *glb_filename, char *xtx_filename, Model *m) {
     binh.chunk_length = bin->length + bin_padding;
     glbh.length = sizeof(glb_file_header) + (2 * sizeof(glb_chunk_header)) + json->length + bin->length + json_padding + bin_padding;
     
-    FILE *fp = fopen(glb_filename, "wb");
-    if(!fp) return;
     fwrite(&glbh, sizeof(glb_file_header), 1, fp);
     fwrite(&jsonh, sizeof(glb_chunk_header), 1, fp);
     fwrite(json->p, 1, json->length, fp);
@@ -497,16 +501,19 @@ int main(int argc, char **argv) {
     }
     char *lex_file = NULL, *xtx_file = NULL, *jnt_file = NULL, *arx_file = NULL;
     vector *lex_files = vector_new(sizeof(char*));
-    bool flag_write = false;
-    bool gltf_write = false;
+    bool flag_write = true;
+    bool gltf_write = true;
     for(int i = 0; i < 256; ++i) dbgflags[i] = false;
     for(int i = 1; i < argc; ++i) {
         if(argv[i][0] == '-') {
             switch(argv[i][1]) {
+                case 's': {
+                    flag_write = false;
+                    break;
+                }
                 case 'w': {
-                    flag_write = true;
-                    if(argv[i][2] == 'g') {
-                        gltf_write = true;
+                    if(argv[i][2] == 'o') {
+                        gltf_write = false;
                     }
                     break;
                 }
@@ -575,6 +582,8 @@ int main(int argc, char **argv) {
     };
     int64_t ret = 0;
     Texture *tex = NULL;
+    Model *model = NULL;
+    void* arx_data = NULL;
     if(xtx_file) {
         tex = malloc(sizeof(Texture));
         memset(tex, 0, sizeof(Texture));
@@ -585,7 +594,6 @@ int main(int argc, char **argv) {
         }
     }
     
-    Model *model = NULL;
     if(lex_files->length) {
         model = malloc(sizeof(Model));
         model->mesh = vector_new(sizeof(Mesh));
@@ -604,7 +612,6 @@ int main(int argc, char **argv) {
         }
     }
     
-    void* arx_data = NULL;
     size_t arx_size = 0;
     if(arx_file) {
         arx_size = uncompress_arx(arx_file, &arx_data);
