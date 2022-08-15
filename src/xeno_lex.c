@@ -240,7 +240,8 @@ int64_t parse_lex(char *filename, Model *model, Texture *tex) {
                                 vv[v].w[n] = ((float*)p[2])[v * 4 + vertex_count * 4 + n];
                                 uint32_t bone = ((uint32_t*)p[2])[v * 4 + n];
                                 if(bone) {
-                                    uint32_t bi = (bone / 4) - 184;
+                                    int32_t bi = (bone / 4) - 184;
+                                    if(bi < 0) {puts("negative bone index"); continue;}
                                     size_t bii;
                                     uint32_t bn = lex.mesh[i].header.unk2[bi+1];
                                     vector_push_unique_i(model->bone, &bn, &bii);
@@ -256,7 +257,8 @@ int64_t parse_lex(char *filename, Model *model, Texture *tex) {
                                 uint32_t bone = ((uint32_t*)p[2])[v * 4 + n];
                                 if(bone) {
                                     vv[v].w[n] = 1;
-                                    uint32_t bi = (bone / 4) - 184;
+                                    int32_t bi = (bone / 4) - 184;
+                                    if(bi < 0) {puts("negative bone index"); continue;}
                                     size_t bii;
                                     uint32_t bn = lex.mesh[i].header.unk2[bi+1];
                                     vector_push_unique_i(model->bone, &bn, &bii);
@@ -265,7 +267,6 @@ int64_t parse_lex(char *filename, Model *model, Texture *tex) {
                                     vv[v].w[n] = ((float*)p[2])[v * 4 + n];;
                                     vv[v].j[n] = 0;
                                 }
-                                // vv[v].j[n] = n;
                             }
                             break;
                         case 5: // 4 values per vert, 2 indices and 2 weights
@@ -274,7 +275,8 @@ int64_t parse_lex(char *filename, Model *model, Texture *tex) {
                                     vv[v].w[n] = ((float*)p[2])[v * 4 + n + 2];
                                     uint32_t bone = ((uint32_t*)p[2])[v * 4 + n];
                                     if(bone) {
-                                        uint32_t bi = (bone / 4) - 184;
+                                        int32_t bi = (bone / 4) - 184;
+                                        if(bi < 0) {puts("negative bone index"); continue;}
                                         size_t bii;
                                         uint32_t bn = lex.mesh[i].header.unk2[bi+1];
                                         vector_push_unique_i(model->bone, &bn, &bii);
@@ -355,8 +357,8 @@ int64_t parse_lex(char *filename, Model *model, Texture *tex) {
                 return -1;
             }
             if(vif.write_masking) {
-                if(dbg('c')) printf("write masking not supported, garbage out\n");
-                // return -1;
+                if(dbg('c')) printf("write masking not supported\n");
+                if(dbg('!')) return -1;
             }
             if(!vif.tops_add) {
                 printf("not adding TOPS?! how dare you!\n");
