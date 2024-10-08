@@ -59,16 +59,16 @@ typedef struct {
 } Vertex;
 
 typedef struct {
-    vector *tri;
+    vector tri;
     char name[64];
     uint32_t weight_format;
 } Mesh;
 
 typedef struct {
-    vector *mesh;
-    vector *material;
-    vector *vertex;
-    vector *bone;
+    vector mesh;
+    vector material;
+    vector vertex;
+    vector bone;
     uint32_t bone_count;
     char name[33];
 } Model;

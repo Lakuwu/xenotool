@@ -5,8 +5,9 @@
 
 typedef vector str;
 
-str *str_new();
-void str_free(str **s);
+str str_init();
+#define str_cleanup(s) vector_cleanup(s);
+void str_cleanup(str *s)
 size_t str_append_cstr(str *s, const char *c);
 const char *str_cstr(str *s);
 #endif
@@ -15,13 +16,9 @@ const char *str_cstr(str *s);
 
 #include <string.h>
 
-str *str_new() {
-    str *ret = vector_new(1);
+str str_init() {
+    str ret = vector_init(1);
     return ret;
-}
-
-void str_free(str **s) {
-    vector_free(s);
 }
 
 size_t str_append_cstr(str *s, const char *c) {

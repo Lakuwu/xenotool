@@ -45,7 +45,7 @@ RGBA* apply_palettes(uint8_t *img_rgb, uint8_t *img, uint16_t w, uint16_t h, vec
             for(uint32_t u = t[i].umin; u < t[i].umax; ++u) {
                 if(u >= (w) || v >= (h)) continue;
                 size_t offset = (v * w) + u;
-                if(dbg('!') && mat_idx[offset] >= 0 && mat_idx[offset] != i) {
+                if(dbg('!') && mat_idx[offset] >= 0 && mat_idx[offset] != (int64_t)i) {
                     printf("idx overlap at %d %d idx: new %lld old %lld pal: new %x old %x\n", u, v, i, mat_idx[offset], t[i].pal, mat_pal[offset]);
                     free(mat_idx);
                     free(mat_pal);

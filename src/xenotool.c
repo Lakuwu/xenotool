@@ -1,3 +1,5 @@
+// gcc -std=c2x -fno-omit-frame-pointer -fcf-protection -fno-math-errno -Wall -Wextra -Wpedantic -g -fsanitize=undefined -fsanitize-trap=all -o ../bin/xenotool.exe xenotool.c xeno_lex.c xeno_xtx.c xeno_arx.c xeno_jnt.c xenodebug.c && xenotool
+
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -66,7 +68,6 @@ XenoFileEnum get_filetype(char *filename) {
 }
 
 void save_image(char *filename, uint16_t width, uint16_t height, void* src, bool rgb) {
-    printf("saving \"%s\"\n", filename);
     uint8_t* b = src;
     RGBA *img = malloc(width * height * sizeof(RGBA));
     if(rgb) {
@@ -94,6 +95,7 @@ void save_image(char *filename, uint16_t width, uint16_t height, void* src, bool
     }
     stbi_write_png(filename, width, height, 4, img, width * 4);
     free(img);
+    printf("Wrote \"%s\"\n", filename);
 }
 
 #define TEX_RGB_FMT "%s_RGB.png"
@@ -103,8 +105,8 @@ void save_mtl(char *mtl_filename, char *xtx_filename, Model *m) {
     FILE *fp = fopen(mtl_filename, "w");
     char *tex_filename = malloc(256);
     if(!fp) return;
-    Material *mp = m->material->p;
-    for(size_t i = 0; i < m->material->length; ++i) {
+    Material *mp = m->material.p;
+    for(size_t i = 0; i < m->material.length; ++i) {
         fprintf(fp, "newmtl material_%llu\n", i);
         fprintf(fp, "Kd %6.9f %6.9f %6.9f\n", mp[i].col.color0[0], mp[i].col.color0[1], mp[i].col.color0[2]);
         if(xtx_filename && mp[i].has_texture) {
@@ -124,19 +126,19 @@ void save_obj(char *obj_filename, char *mtl_filename, Model *m) {
     FILE *fp = fopen(obj_filename, "w");
     if(!fp) return;
     fprintf(fp,"mtllib %s\n", mtl_filename);
-    Vertex *vp = m->vertex->p;
-    for(size_t i = 0; i < m->vertex->length; ++i) {
+    Vertex *vp = m->vertex.p;
+    for(size_t i = 0; i < m->vertex.length; ++i) {
         fprintf(fp, "v %6.9f %6.9f %6.9f\n", vp[i].x, vp[i].y, vp[i].z);
         fprintf(fp, "vt %6.9f %6.9f\n", vp[i].u, vp[i].v);
         fprintf(fp, "vn %6.9f %6.9f %6.9f\n", vp[i].nx, vp[i].ny, vp[i].nz);
     }
     size_t material_index = SIZE_MAX;
-    Mesh *mp = m->mesh->p;
-    for(size_t i = 0; i < m->mesh->length; ++i) {
+    Mesh *mp = m->mesh.p;
+    for(size_t i = 0; i < m->mesh.length; ++i) {
         // fprintf(fp, "o object_%llu\n", i);
         fprintf(fp, "o %s\n", mp[i].name);
-        Triangle *tp = mp[i].tri->p;
-        for(size_t j = 0; j < mp[i].tri->length; ++j) {
+        Triangle *tp = mp[i].tri.p;
+        for(size_t j = 0; j < mp[i].tri.length; ++j) {
             if(tp[j].mat != material_index) {
                 material_index = tp[j].mat;
                 fprintf(fp, "usemtl material_%llu\n", material_index);
@@ -157,10 +159,10 @@ void save_obj(char *obj_filename, char *mtl_filename, Model *m) {
 void save_glb(char *glb_filename, char *xtx_filename, Model *m) {
     FILE *fp = fopen(glb_filename, "wb");
     if(!fp) {
-        printf("Failed to open file for saving: \"%s\"\n", glb_filename);
+        printf("Failed to open file for writing: \"%s\"\n", glb_filename);
         return;
     }
-    printf("Saving \"%s\"\n", glb_filename);
+    
     char tex_rgb[256];
     char tex_pal[256];
     if(xtx_filename) {
@@ -182,16 +184,16 @@ void save_glb(char *glb_filename, char *xtx_filename, Model *m) {
     }
     
     //prepare binary chunk
-    vector *bin = vector_new(1);
-    Vertex *vp = m->vertex->p;
+    vector bin = vector_init(1);
+    Vertex *vp = m->vertex.p;
     float min_x, min_y, min_z, max_x, max_y, max_z;
     min_x = max_x = vp[0].x;
     min_y = max_y = vp[0].y;
     min_z = max_z = vp[0].z;
-    for(size_t i = 0; i < m->vertex->length; ++i) {
-        vector_push_n(bin, &vp[i].x, sizeof(float));
-        vector_push_n(bin, &vp[i].y, sizeof(float));
-        vector_push_n(bin, &vp[i].z, sizeof(float));
+    for(size_t i = 0; i < m->vertex.length; ++i) {
+        vector_push_n(&bin, &vp[i].x, sizeof(float));
+        vector_push_n(&bin, &vp[i].y, sizeof(float));
+        vector_push_n(&bin, &vp[i].z, sizeof(float));
         min_x = MIN(min_x, vp[i].x);
         min_y = MIN(min_y, vp[i].y);
         min_z = MIN(min_z, vp[i].z);
@@ -199,163 +201,163 @@ void save_glb(char *glb_filename, char *xtx_filename, Model *m) {
         max_y = MAX(max_y, vp[i].y);
         max_z = MAX(max_z, vp[i].z);
     }
-    size_t position_size = bin->length;
+    size_t position_size = bin.length;
     
-    size_t normal_offset = bin->length;
-    for(size_t i = 0; i < m->vertex->length; ++i) {
-        vector_push_n(bin, &vp[i].nx, sizeof(float));
-        vector_push_n(bin, &vp[i].ny, sizeof(float));
-        vector_push_n(bin, &vp[i].nz, sizeof(float));
+    size_t normal_offset = bin.length;
+    for(size_t i = 0; i < m->vertex.length; ++i) {
+        vector_push_n(&bin, &vp[i].nx, sizeof(float));
+        vector_push_n(&bin, &vp[i].ny, sizeof(float));
+        vector_push_n(&bin, &vp[i].nz, sizeof(float));
     }
-    size_t normal_size = bin->length - normal_offset;
+    size_t normal_size = bin.length - normal_offset;
     
-    size_t uv_offset = bin->length;
-    for(size_t i = 0; i < m->vertex->length; ++i) {
-        vector_push_n(bin, &vp[i].u, sizeof(float));
+    size_t uv_offset = bin.length;
+    for(size_t i = 0; i < m->vertex.length; ++i) {
+        vector_push_n(&bin, &vp[i].u, sizeof(float));
         float v = 1 - vp[i].v;
-        vector_push_n(bin, &v, sizeof(float));
+        vector_push_n(&bin, &v, sizeof(float));
     }
-    size_t uv_size = bin->length - uv_offset;
+    size_t uv_size = bin.length - uv_offset;
     
-    size_t color_offset = bin->length;
-    for(size_t i = 0; i < m->vertex->length; ++i) {
-        vector_push_n(bin, &vp[i].r, sizeof(float));
-        vector_push_n(bin, &vp[i].g, sizeof(float));
-        vector_push_n(bin, &vp[i].b, sizeof(float));
-        vector_push_n(bin, &vp[i].a, sizeof(float));
+    size_t color_offset = bin.length;
+    for(size_t i = 0; i < m->vertex.length; ++i) {
+        vector_push_n(&bin, &vp[i].r, sizeof(float));
+        vector_push_n(&bin, &vp[i].g, sizeof(float));
+        vector_push_n(&bin, &vp[i].b, sizeof(float));
+        vector_push_n(&bin, &vp[i].a, sizeof(float));
     }
-    size_t color_size = bin->length - color_offset;
+    size_t color_size = bin.length - color_offset;
     
-    size_t weight_offset = bin->length;
-    for(size_t i = 0; i < m->vertex->length; ++i) {
+    size_t weight_offset = bin.length;
+    for(size_t i = 0; i < m->vertex.length; ++i) {
         float w[4] = {vp[i].w[0], vp[i].w[1], vp[i].w[2], vp[i].w[3]};
         float sum = w[0] + w[1] + w[2] + w[3];
         for(int j = 0; j < 4; ++j) w[j] /= sum;
-        vector_push_n(bin, &w[0], sizeof(float));
-        vector_push_n(bin, &w[1], sizeof(float));
-        vector_push_n(bin, &w[2], sizeof(float));
-        vector_push_n(bin, &w[3], sizeof(float));
+        vector_push_n(&bin, &w[0], sizeof(float));
+        vector_push_n(&bin, &w[1], sizeof(float));
+        vector_push_n(&bin, &w[2], sizeof(float));
+        vector_push_n(&bin, &w[3], sizeof(float));
     }
-    size_t weight_size = bin->length - weight_offset;
+    size_t weight_size = bin.length - weight_offset;
     
-    size_t joint_offset = bin->length;
-    for(size_t i = 0; i < m->vertex->length; ++i) {
+    size_t joint_offset = bin.length;
+    for(size_t i = 0; i < m->vertex.length; ++i) {
         int16_t j[4] = {vp[i].j[0], vp[i].j[1], vp[i].j[2], vp[i].j[3]};
         float w[4] = {vp[i].w[0], vp[i].w[1], vp[i].w[2], vp[i].w[3]};
         for(int k = 0; k < 4; ++k) if(w[k] == 0 && j[k] != 0) j[k] = 0;
-        vector_push_n(bin, &j[0], sizeof(int16_t));
-        vector_push_n(bin, &j[1], sizeof(int16_t));
-        vector_push_n(bin, &j[2], sizeof(int16_t));
-        vector_push_n(bin, &j[3], sizeof(int16_t));
+        vector_push_n(&bin, &j[0], sizeof(int16_t));
+        vector_push_n(&bin, &j[1], sizeof(int16_t));
+        vector_push_n(&bin, &j[2], sizeof(int16_t));
+        vector_push_n(&bin, &j[3], sizeof(int16_t));
     }
-    size_t joint_size = bin->length - joint_offset;
+    size_t joint_size = bin.length - joint_offset;
     
     struct material_span{
         size_t mesh;
         size_t count;
         size_t mat;
     };
-    vector *mspanv = vector_new(sizeof(struct material_span));
+    vector mspanv = vector_init(sizeof(struct material_span));
     struct material_span mspan = {0};
     
-    size_t indices_offset = bin->length;
+    size_t indices_offset = bin.length;
     bool has_weights = false;
-    for(size_t i = 0; i < m->mesh->length; ++i) {
-        Mesh *mesh = &((Mesh*)m->mesh->p)[i];
+    for(size_t i = 0; i < m->mesh.length; ++i) {
+        Mesh *mesh = &((Mesh*)m->mesh.p)[i];
         has_weights = (mesh->weight_format & 0xff ? true : has_weights);
-        Triangle *t = mesh->tri->p;
-        for(size_t j = 0; j < mesh->tri->length; ++j) {
+        Triangle *t = mesh->tri.p;
+        for(size_t j = 0; j < mesh->tri.length; ++j) {
             if(mspan.mat == t[j].mat && mspan.mesh == i) {
                 ++mspan.count;
             } else {
-                vector_push(mspanv, &mspan);
+                vector_push(&mspanv, &mspan);
                 mspan.mat = t[j].mat;
                 mspan.count = 1;
                 mspan.mesh = i;
             }
             uint32_t idx = t[j].i[0];
-            vector_push_n(bin, &idx, sizeof(uint32_t));
+            vector_push_n(&bin, &idx, sizeof(uint32_t));
             idx = t[j].i[1];
-            vector_push_n(bin, &idx, sizeof(uint32_t));
+            vector_push_n(&bin, &idx, sizeof(uint32_t));
             idx = t[j].i[2];
-            vector_push_n(bin, &idx, sizeof(uint32_t));
+            vector_push_n(&bin, &idx, sizeof(uint32_t));
         }
     }
-    vector_push(mspanv, &mspan);
-    size_t indices_size = bin->length - indices_offset;
+    vector_push(&mspanv, &mspan);
+    size_t indices_size = bin.length - indices_offset;
     
     //prepare json chunk
-    str *json = str_new();
+    str json = str_init();
     char buf[1024];
     
-    str_append_cstr(json, "{\"asset\":{\"generator\":\"xenotool by Laku, built on "__DATE__"\",\"version\":\"2.0\"}");
+    str_append_cstr(&json, "{\"asset\":{\"generator\":\"xenotool by Laku, built on "__DATE__"\",\"version\":\"2.0\"}");
     
     //scene
-    str_append_cstr(json, ",\"scene\":0,\"scenes\":[{\"name\":\"Scene\",\"nodes\":[");
+    str_append_cstr(&json, ",\"scene\":0,\"scenes\":[{\"name\":\"Scene\",\"nodes\":[");
     if(has_weights) {
         snprintf(buf, 1024, "%u", m->bone_count);
-        str_append_cstr(json, buf);
-        for(size_t i = 0; i < m->mesh->length; ++i) {
-            snprintf(buf, 1024, ",%llu", m->bone->length + 1 + i);
-            str_append_cstr(json, buf);
+        str_append_cstr(&json, buf);
+        for(size_t i = 0; i < m->mesh.length; ++i) {
+            snprintf(buf, 1024, ",%llu", m->bone.length + 1 + i);
+            str_append_cstr(&json, buf);
         }
     } else {
-        for(size_t i = 0; i < m->mesh->length; ++i) {
-            if(i > 0) str_append_cstr(json, ",");
+        for(size_t i = 0; i < m->mesh.length; ++i) {
+            if(i > 0) str_append_cstr(&json, ",");
             snprintf(buf, 1024, "%llu", i);
-            str_append_cstr(json, buf);
+            str_append_cstr(&json, buf);
         }
     }
-    str_append_cstr(json, "]}]");
+    str_append_cstr(&json, "]}]");
     
     //nodes
-    str_append_cstr(json, ",\"nodes\":[");
+    str_append_cstr(&json, ",\"nodes\":[");
     if(has_weights) {
-        for(uint32_t i = 0; i < m->bone->length; ++i) {
-            if(i > 0) str_append_cstr(json, ",");
-            str_append_cstr(json, "{");
+        for(uint32_t i = 0; i < m->bone.length; ++i) {
+            if(i > 0) str_append_cstr(&json, ",");
+            str_append_cstr(&json, "{");
             if(i > 0) {
                 snprintf(buf, 1024, "\"children\":[%d],", i-1);
-                str_append_cstr(json, buf);
+                str_append_cstr(&json, buf);
             }
             int j = m->bone_count - 1 - i;
-            uint32_t bone_idx = ((uint32_t*)m->bone->p)[j];
+            uint32_t bone_idx = ((uint32_t*)m->bone.p)[j];
             snprintf(buf, 1024, "\"name\":\"Bone%02d_%02x\"}", j, bone_idx);
-            str_append_cstr(json, buf);
+            str_append_cstr(&json, buf);
         }
         snprintf(buf, 1024, ",{\"children\":[%d", m->bone_count - 1);
-        str_append_cstr(json, buf);
+        str_append_cstr(&json, buf);
         snprintf(buf, 1024, "],\"name\":\"%s\"},", m->name);
-        str_append_cstr(json, buf);
+        str_append_cstr(&json, buf);
     }
-    for(size_t i = 0; i < m->mesh->length; ++i) {
-        if(i > 0) str_append_cstr(json, ",");
-        Mesh *mesh = &((Mesh*)m->mesh->p)[i];
+    for(size_t i = 0; i < m->mesh.length; ++i) {
+        if(i > 0) str_append_cstr(&json, ",");
+        Mesh *mesh = &((Mesh*)m->mesh.p)[i];
         if(mesh->weight_format & 0xff) {
             snprintf(buf, 1024, "{\"mesh\":%llu,\"name\":\"%s\",\"skin\":0}", i, mesh->name);
         } else {
             snprintf(buf, 1024, "{\"mesh\":%llu,\"name\":\"%s\"}", i, mesh->name);
         }
-        str_append_cstr(json, buf);
+        str_append_cstr(&json, buf);
     }
-    str_append_cstr(json, "]");
+    str_append_cstr(&json, "]");
     
     //skins
     if(has_weights) {
-        str_append_cstr(json, ",\"skins\":[{\"joints\":[");
+        str_append_cstr(&json, ",\"skins\":[{\"joints\":[");
         for(uint32_t i = 0; i < m->bone_count; ++i) {
-            if(i > 0) str_append_cstr(json, ",");
+            if(i > 0) str_append_cstr(&json, ",");
             snprintf(buf, 1024, "%d", m->bone_count - 1 - i);
-            str_append_cstr(json, buf);
+            str_append_cstr(&json, buf);
         }
-        str_append_cstr(json, "],\"name\":\"Armature\"}]");
+        str_append_cstr(&json, "],\"name\":\"Armature\"}]");
     }
     
     //materials
-    str_append_cstr(json, ",\"materials\":[");
-    for(size_t i = 0; i < m->material->length; ++i) {
-        if(i > 0) str_append_cstr(json, ",");
-        Material material = ((Material*)m->material->p)[i];
+    str_append_cstr(&json, ",\"materials\":[");
+    for(size_t i = 0; i < m->material.length; ++i) {
+        if(i > 0) str_append_cstr(&json, ",");
+        Material material = ((Material*)m->material.p)[i];
         float *col = material.col.color0;
         if(xtx_filename && material.has_texture) {
             if(material.pal == 0xff) {
@@ -366,23 +368,23 @@ void save_glb(char *glb_filename, char *xtx_filename, Model *m) {
         } else {
             snprintf(buf, 1024, "{\"doubleSided\":true,\"name\":\"Material_%llu\",\"pbrMetallicRoughness\":{\"baseColorFactor\":[%6.9f,%6.9f,%6.9f,%6.9f],\"metallicFactor\":0.0,\"roughnessFactor\":0.5}}", i, CLAMP(col[0],0,1), CLAMP(col[1],0,1), CLAMP(col[2],0,1), CLAMP(col[3],0,1));
         }
-        str_append_cstr(json, buf);
+        str_append_cstr(&json, buf);
     }
-    str_append_cstr(json, "]");
+    str_append_cstr(&json, "]");
     
     //meshes
     const int attribute_count = 6;
     size_t mspani = 0;
-    struct material_span *mspanp = mspanv->p;
-    str_append_cstr(json, ",\"meshes\":[");
-    for(size_t i = 0; i < m->mesh->length; ++i) {
-        if(i > 0) str_append_cstr(json, ",");
-        Mesh mesh = ((Mesh*)m->mesh->p)[i];
+    struct material_span *mspanp = mspanv.p;
+    str_append_cstr(&json, ",\"meshes\":[");
+    for(size_t i = 0; i < m->mesh.length; ++i) {
+        if(i > 0) str_append_cstr(&json, ",");
+        Mesh mesh = ((Mesh*)m->mesh.p)[i];
         snprintf(buf, 1024, "{\"name\":\"%s\",\"primitives\":[", mesh.name);
-        str_append_cstr(json, buf);
+        str_append_cstr(&json, buf);
         int j = 0;
         while(mspanp[mspani].mesh == i) {
-            if(j++ > 0) str_append_cstr(json, ",");
+            if(j++ > 0) str_append_cstr(&json, ",");
             switch(mesh.weight_format) {
                 default:
                 case 0:
@@ -396,101 +398,102 @@ void save_glb(char *glb_filename, char *xtx_filename, Model *m) {
                     break;
             }
             
-            str_append_cstr(json, buf);
+            str_append_cstr(&json, buf);
             ++mspani;
-            if(mspani >= mspanv->length) break;
+            if(mspani >= mspanv.length) break;
         }
-        str_append_cstr(json, "]}");
+        str_append_cstr(&json, "]}");
     }
-    str_append_cstr(json, "]");
+    str_append_cstr(&json, "]");
     
     //accessors
-    str_append_cstr(json, ",\"accessors\":[");
-    snprintf(buf, 1024, "{\"bufferView\":0,\"componentType\":5126,\"count\":%llu,\"max\":[%6.9f,%6.9f,%6.9f],\"min\":[%6.9f,%6.9f,%6.9f],\"type\":\"VEC3\"},", m->vertex->length, max_x, max_y, max_z, min_x, min_y, min_z);
-    str_append_cstr(json, buf);
-    snprintf(buf, 1024, "{\"bufferView\":1,\"componentType\":5126,\"count\":%llu,\"type\":\"VEC3\"},", m->vertex->length);
-    str_append_cstr(json, buf);
-    snprintf(buf, 1024, "{\"bufferView\":2,\"componentType\":5126,\"count\":%llu,\"type\":\"VEC2\"},", m->vertex->length);
-    str_append_cstr(json, buf);
-    snprintf(buf, 1024, "{\"bufferView\":3,\"componentType\":5126,\"count\":%llu,\"type\":\"VEC4\"},", m->vertex->length);
-    str_append_cstr(json, buf);
-    snprintf(buf, 1024, "{\"bufferView\":4,\"componentType\":5126,\"count\":%llu,\"type\":\"VEC4\"},", m->vertex->length);
-    str_append_cstr(json, buf);
-    snprintf(buf, 1024, "{\"bufferView\":5,\"componentType\":5123,\"count\":%llu,\"type\":\"VEC4\"},", m->vertex->length);
-    str_append_cstr(json, buf);
+    str_append_cstr(&json, ",\"accessors\":[");
+    snprintf(buf, 1024, "{\"bufferView\":0,\"componentType\":5126,\"count\":%llu,\"max\":[%6.9f,%6.9f,%6.9f],\"min\":[%6.9f,%6.9f,%6.9f],\"type\":\"VEC3\"},", m->vertex.length, max_x, max_y, max_z, min_x, min_y, min_z);
+    str_append_cstr(&json, buf);
+    snprintf(buf, 1024, "{\"bufferView\":1,\"componentType\":5126,\"count\":%llu,\"type\":\"VEC3\"},", m->vertex.length);
+    str_append_cstr(&json, buf);
+    snprintf(buf, 1024, "{\"bufferView\":2,\"componentType\":5126,\"count\":%llu,\"type\":\"VEC2\"},", m->vertex.length);
+    str_append_cstr(&json, buf);
+    snprintf(buf, 1024, "{\"bufferView\":3,\"componentType\":5126,\"count\":%llu,\"type\":\"VEC4\"},", m->vertex.length);
+    str_append_cstr(&json, buf);
+    snprintf(buf, 1024, "{\"bufferView\":4,\"componentType\":5126,\"count\":%llu,\"type\":\"VEC4\"},", m->vertex.length);
+    str_append_cstr(&json, buf);
+    snprintf(buf, 1024, "{\"bufferView\":5,\"componentType\":5123,\"count\":%llu,\"type\":\"VEC4\"},", m->vertex.length);
+    str_append_cstr(&json, buf);
     size_t accessor_byteoffset = 0;
-    for(size_t i = 0; i < mspanv->length; ++i) {
-        if(i > 0) str_append_cstr(json, ",");
+    for(size_t i = 0; i < mspanv.length; ++i) {
+        if(i > 0) str_append_cstr(&json, ",");
         size_t count = mspanp[i].count * 3;
         snprintf(buf, 1024, "{\"bufferView\":6,\"byteOffset\":%llu,\"componentType\":5125,\"count\":%llu,\"type\":\"SCALAR\"}", accessor_byteoffset, count);
         accessor_byteoffset += count * sizeof(uint32_t);
-        str_append_cstr(json, buf);
+        str_append_cstr(&json, buf);
     }
-    str_append_cstr(json, "]");
+    str_append_cstr(&json, "]");
     
     if(xtx_filename) {
         //textures
-        str_append_cstr(json, ",\"textures\":[{\"source\":0},{\"source\":1}]");
+        str_append_cstr(&json, ",\"textures\":[{\"source\":0},{\"source\":1}]");
         
         //images
         snprintf(buf, 1024, ",\"images\":[{\"uri\":\"%s\"},{\"uri\":\"%s\"}]", tex_rgb, tex_pal);
-        str_append_cstr(json, buf);
+        str_append_cstr(&json, buf);
     }
     
     //bufferViews
-    str_append_cstr(json, ",\"bufferViews\":[");
+    str_append_cstr(&json, ",\"bufferViews\":[");
     snprintf(buf, 1024, "{\"buffer\":0,\"byteLength\":%llu,\"byteOffset\":0,\"target\":34962},", position_size);
-    str_append_cstr(json, buf);
+    str_append_cstr(&json, buf);
     snprintf(buf, 1024, "{\"buffer\":0,\"byteLength\":%llu,\"byteOffset\":%llu,\"target\":34962},", normal_size, normal_offset);
-    str_append_cstr(json, buf);
+    str_append_cstr(&json, buf);
     snprintf(buf, 1024, "{\"buffer\":0,\"byteLength\":%llu,\"byteOffset\":%llu,\"target\":34962},", uv_size, uv_offset);
-    str_append_cstr(json, buf);
+    str_append_cstr(&json, buf);
     snprintf(buf, 1024, "{\"buffer\":0,\"byteLength\":%llu,\"byteOffset\":%llu,\"target\":34962},", color_size, color_offset);
-    str_append_cstr(json, buf);
+    str_append_cstr(&json, buf);
     snprintf(buf, 1024, "{\"buffer\":0,\"byteLength\":%llu,\"byteOffset\":%llu,\"target\":34962},", weight_size, weight_offset);
-    str_append_cstr(json, buf);
+    str_append_cstr(&json, buf);
     snprintf(buf, 1024, "{\"buffer\":0,\"byteLength\":%llu,\"byteOffset\":%llu,\"target\":34962},", joint_size, joint_offset);
-    str_append_cstr(json, buf);
+    str_append_cstr(&json, buf);
     snprintf(buf, 1024, "{\"buffer\":0,\"byteLength\":%llu,\"byteOffset\":%llu,\"target\":34963}", indices_size, indices_offset);
-    str_append_cstr(json, buf);
-    str_append_cstr(json, "]");
+    str_append_cstr(&json, buf);
+    str_append_cstr(&json, "]");
     
     //buffers
-    str_append_cstr(json, ",\"buffers\":[{\"byteLength\":");
-    sprintf(buf,"%llu", bin->length);
-    str_append_cstr(json, buf);
-    str_append_cstr(json, "}]");
+    str_append_cstr(&json, ",\"buffers\":[{\"byteLength\":");
+    sprintf(buf,"%llu", bin.length);
+    str_append_cstr(&json, buf);
+    str_append_cstr(&json, "}]");
     
-    str_append_cstr(json, "}");
+    str_append_cstr(&json, "}");
     
-    if(dbg('g')) printf("%s\n", str_cstr(json));
+    if(dbg('g')) printf("%s\n", str_cstr(&json));
     
     glb_file_header glbh;
     glbh.magic = GLB_MAGIC;
     glbh.version = 2;
     glb_chunk_header jsonh;
     jsonh.chunk_type = GLB_CHUNK_TYPE_JSON;
-    size_t json_padding = ((4 - (json->length % 4)) % 4);
-    jsonh.chunk_length = json->length + json_padding;
+    size_t json_padding = ((4 - (json.length % 4)) % 4);
+    jsonh.chunk_length = json.length + json_padding;
     glb_chunk_header binh;
     binh.chunk_type = GLB_CHUNK_TYPE_BIN;
-    size_t bin_padding = ((4 - (bin->length % 4)) % 4);
-    binh.chunk_length = bin->length + bin_padding;
-    glbh.length = sizeof(glb_file_header) + (2 * sizeof(glb_chunk_header)) + json->length + bin->length + json_padding + bin_padding;
+    size_t bin_padding = ((4 - (bin.length % 4)) % 4);
+    binh.chunk_length = bin.length + bin_padding;
+    glbh.length = sizeof(glb_file_header) + (2 * sizeof(glb_chunk_header)) + json.length + bin.length + json_padding + bin_padding;
     
     fwrite(&glbh, sizeof(glb_file_header), 1, fp);
     fwrite(&jsonh, sizeof(glb_chunk_header), 1, fp);
-    fwrite(json->p, 1, json->length, fp);
+    fwrite(json.p, 1, json.length, fp);
     char json_padding_data[4] = "   ";
     fwrite(json_padding_data, 1, json_padding, fp);
     fwrite(&binh, sizeof(glb_chunk_header), 1, fp);
-    fwrite(bin->p, 1, bin->length, fp);
+    fwrite(bin.p, 1, bin.length, fp);
     uint8_t bin_padding_data[3] = {0, 0, 0};
     fwrite(bin_padding_data, 1, bin_padding, fp);
     fclose(fp);
-    str_free(&json);
-    vector_free(&bin);
-    vector_free(&mspanv);
+    str_cleanup(&json);
+    vector_cleanup(&bin);
+    vector_cleanup(&mspanv);
+    printf("Wrote \"%s\"\n", glb_filename);
 }
 
 int main(int argc, char **argv) {
@@ -500,7 +503,7 @@ int main(int argc, char **argv) {
         return 0;
     }
     char *lex_file = NULL, *xtx_file = NULL, *jnt_file = NULL, *arx_file = NULL;
-    vector *lex_files = vector_new(sizeof(char*));
+    vector lex_files = vector_init(sizeof(char*));
     bool flag_write = true;
     bool gltf_write = true;
     for(int i = 0; i < 256; ++i) dbgflags[i] = false;
@@ -537,7 +540,7 @@ int main(int argc, char **argv) {
                 case FILE_LEX: {
                     printf("LEX file \"%s\"\n", argv[i]);
                     if(!lex_file) lex_file = argv[i];
-                    vector_push(lex_files, &argv[i]);
+                    vector_push(&lex_files, &argv[i]);
                     break;
                 }
                 case FILE_XTX: {
@@ -594,18 +597,18 @@ int main(int argc, char **argv) {
         }
     }
     
-    if(lex_files->length) {
+    if(lex_files.length) {
         model = malloc(sizeof(Model));
-        model->mesh = vector_new(sizeof(Mesh));
-        model->vertex = vector_new(sizeof(Vertex));
-        model->material = vector_new(sizeof(Material));
-        model->bone = vector_new(sizeof(uint32_t));
+        model->mesh = vector_init(sizeof(Mesh));
+        model->vertex = vector_init(sizeof(Vertex));
+        model->material = vector_init(sizeof(Material));
+        model->bone = vector_init(sizeof(uint32_t));
         model->bone_count = 0;
         model->name[0] = 0;
-        for(size_t i = 0; i < lex_files->length; ++i) {
-            ret = parse_lex(((char**)lex_files->p)[i], model, tex);
+        for(size_t i = 0; i < lex_files.length; ++i) {
+            ret = parse_lex(((char**)lex_files.p)[i], model, tex);
             if(ret < 0) {
-                printf("Failed to parse LEX file \"%s\".\n", ((char**)lex_files->p)[i]);
+                printf("Failed to parse LEX file \"%s\".\n", ((char**)lex_files.p)[i]);
                 goto END;
             }
             printf("%lld tris\n", ret);
@@ -628,10 +631,11 @@ int main(int argc, char **argv) {
         if(fp) {
             fwrite(arx_data, 1, arx_size, fp);
             fclose(fp);
+            printf("Wrote \"%s\"\n", filename);
         }
     }
     
-    if(lex_files->length && flag_write && !gltf_write) {
+    if(lex_files.length && flag_write && !gltf_write) {
         char *obj_filename = malloc(256);
         char *mtl_filename = malloc(256);
         snprintf(obj_filename, 256, "%s.obj", lex_file);
@@ -642,7 +646,7 @@ int main(int argc, char **argv) {
         free(mtl_filename);
     }
     
-    if(lex_files->length && flag_write && gltf_write) {
+    if(lex_files.length && flag_write && gltf_write) {
         char *glb_filename = malloc(256);
         snprintf(glb_filename, 256, "%s.glb", lex_file);
         save_glb(glb_filename, xtx_file, model);
@@ -657,8 +661,8 @@ int main(int argc, char **argv) {
         snprintf(filename, 256, "%s_unswizzled.png", xtx_file);
         save_image(filename, tex->width, tex->height, tex->unswizzled, false);
         
-        if(model->material->length) {
-            RGBA *rgba = apply_palettes(tex->rgb, tex->unswizzled, tex->width, tex->height, model->material);
+        if(model->material.length) {
+            RGBA *rgba = apply_palettes(tex->rgb, tex->unswizzled, tex->width, tex->height, &model->material);
             snprintf(filename, 256, "%s_palette.png", xtx_file);
             save_image(filename, tex->width, tex->height, rgba, true);
             free(rgba);
@@ -681,9 +685,9 @@ END:
         free(tex);
     }
     if(model) {
-        vector_free(&(model->material));
-        vector_free(&(model->mesh));
-        vector_free(&(model->vertex));
+        vector_cleanup(&(model->material));
+        vector_cleanup(&(model->mesh));
+        vector_cleanup(&(model->vertex));
         free(model);
     }
     return ret;

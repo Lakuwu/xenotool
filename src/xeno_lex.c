@@ -76,7 +76,7 @@ int64_t parse_lex(char *filename, Model *model, Texture *tex) {
     size_t components[MAX_J];
     size_t component_bytes[MAX_J];
     int64_t tricount = 0;
-    vector *boneiv = vector_new(sizeof(uint32_t));
+    vector boneiv = vector_init(sizeof(uint32_t));
     Vertex *vv = malloc(sizeof(Vertex) * MAX_V);
     size_t *vi = malloc(sizeof(size_t) * MAX_V);
     size_t material_index = 0;
@@ -84,17 +84,17 @@ int64_t parse_lex(char *filename, Model *model, Texture *tex) {
         if(dbg('H')) printf("object %d\n", i);
         fseek(fp, lex.mesh_addr[i], SEEK_SET);
         fread(&lex.mesh[i].header, sizeof(MeshHeader), 1, fp);
-        vector_push_unique(boneiv, &(lex.mesh[i].header.bone_idx));
+        vector_push_unique(&boneiv, &(lex.mesh[i].header.bone_idx));
         if(dbg('H')) print_meshheader(lex.mesh[i].header);
         MaterialRaw mr = (MaterialRaw){.uvinfo = lex.mesh[i].header.uvinfo, .pal0 = lex.mesh[i].header.pal0};
         if(dbg('m')) print_materialraw(mr);
         MaterialColor col = lex.mesh[i].header.col;
         Material mat = parse_materialraw(mr, tex);
         mat.col = col;
-        vector_push_unique_i(model->material, &mat, &material_index);
+        vector_push_unique_i(&model->material, &mat, &material_index);
         if(dbg('m')) printf("^ material idx %llu\n", material_index);
         Mesh mesh;
-        mesh.tri = vector_new(sizeof(Triangle));
+        mesh.tri = vector_init(sizeof(Triangle));
         mesh.name[0] = '\0';
         mesh.weight_format = lex.mesh[i].header.weight_format;
         snprintf(mesh.name, 64, "%02d/%s/%s", i, lex.mesh[i].header.group_name, lex.mesh[i].header.bone_name);
@@ -109,7 +109,7 @@ int64_t parse_lex(char *filename, Model *model, Texture *tex) {
         while(true) {
             VIFCommand vif;
             fread(&vif, sizeof(VIFCommand), 1 , fp);
-            if(feof(fp) || ftell(fp)-4 == next_addr) {
+            if(feof(fp) || ftell(fp)-4 == (int64_t)next_addr) {
                 break;
             }
             if(dbg('c')) print_vifcommand(vif, ftell(fp));
@@ -197,7 +197,7 @@ int64_t parse_lex(char *filename, Model *model, Texture *tex) {
                     j = 0;
                     continue;
                 }
-                Material material = ((Material*)model->material->p)[material_index]; 
+                Material material = ((Material*)model->material.p)[material_index]; 
                 for(size_t v = 0; v < vertex_count; ++v) {
                     if(vertex_format == 0x10) {
                         vv[v].x  = ((float*)p[0])[v * 4];
@@ -244,7 +244,7 @@ int64_t parse_lex(char *filename, Model *model, Texture *tex) {
                                     if(bi < 0) {puts("negative bone index"); continue;}
                                     size_t bii;
                                     uint32_t bn = lex.mesh[i].header.unk2[bi+1];
-                                    vector_push_unique_i(model->bone, &bn, &bii);
+                                    vector_push_unique_i(&model->bone, &bn, &bii);
                                     vv[v].j[n] = bii;
                                 } else {
                                     vv[v].j[n] = 0;
@@ -261,7 +261,7 @@ int64_t parse_lex(char *filename, Model *model, Texture *tex) {
                                     if(bi < 0) {puts("negative bone index"); continue;}
                                     size_t bii;
                                     uint32_t bn = lex.mesh[i].header.unk2[bi+1];
-                                    vector_push_unique_i(model->bone, &bn, &bii);
+                                    vector_push_unique_i(&model->bone, &bn, &bii);
                                     vv[v].j[n] = bii;
                                 } else {
                                     vv[v].w[n] = ((float*)p[2])[v * 4 + n];;
@@ -279,7 +279,7 @@ int64_t parse_lex(char *filename, Model *model, Texture *tex) {
                                         if(bi < 0) {puts("negative bone index"); continue;}
                                         size_t bii;
                                         uint32_t bn = lex.mesh[i].header.unk2[bi+1];
-                                        vector_push_unique_i(model->bone, &bn, &bii);
+                                        vector_push_unique_i(&model->bone, &bn, &bii);
                                         vv[v].j[n] = bii;
                                     } else {
                                         vv[v].j[n] = 0;
@@ -324,9 +324,9 @@ int64_t parse_lex(char *filename, Model *model, Texture *tex) {
                     vv0.v = 1 - vv0.v;
                     vv1.v = 1 - vv1.v;
                     vv2.v = 1 - vv2.v;
-                    vector_push_unique_i(model->vertex, &vv0, &vi[v]);
-                    vector_push_unique_i(model->vertex, &vv1, &vi[v + 1]);
-                    vector_push_unique_i(model->vertex, &vv2, &vi[v + 2]);
+                    vector_push_unique_i(&model->vertex, &vv0, &vi[v]);
+                    vector_push_unique_i(&model->vertex, &vv1, &vi[v + 1]);
+                    vector_push_unique_i(&model->vertex, &vv2, &vi[v + 2]);
                     Triangle t;
                     t.mat = material_index;
                     size_t v1, v2;
@@ -340,7 +340,7 @@ int64_t parse_lex(char *filename, Model *model, Texture *tex) {
                     t.i[0] = vi[v];
                     t.i[1] = vi[v1];
                     t.i[2] = vi[v2];
-                    vector_push(mesh.tri, &t);
+                    vector_push(&mesh.tri, &t);
                 }
                 memset(mem, 0, data_len);
                 data_len = 0;
@@ -382,7 +382,7 @@ int64_t parse_lex(char *filename, Model *model, Texture *tex) {
                         Material newmat = parse_materialraw(mr, tex);
                         col = matb.col;
                         newmat.col = col;
-                        vector_push_unique_i(model->material, &newmat, &material_index);
+                        vector_push_unique_i(&model->material, &newmat, &material_index);
                         num[j] = 0;
                         if(dbg('m')) print_materialblock(matb);
                         if(dbg('m')) printf("^ material idx %llu\n", material_index);
@@ -394,7 +394,7 @@ int64_t parse_lex(char *filename, Model *model, Texture *tex) {
                         if(dbg('m')) print_materialraw(mr);
                         Material newmat = parse_materialraw(mr, tex);
                         newmat.col = col;
-                        vector_push_unique_i(model->material, &newmat, &material_index);
+                        vector_push_unique_i(&model->material, &newmat, &material_index);
                         num[j] = 0;
                         if(dbg('m')) print_materialblocksmall(matbs);
                         if(dbg('m')) printf("^ material idx %llu\n", material_index);
@@ -425,9 +425,9 @@ int64_t parse_lex(char *filename, Model *model, Texture *tex) {
                 return -1;
             }
         }
-        tricount += mesh.tri->length;
-        if(dbg('t')) printf("%llu triangles\n", mesh.tri->length);
-        if(!vector_push(model->mesh, &mesh)) {
+        tricount += mesh.tri.length;
+        if(dbg('t')) printf("%llu triangles\n", mesh.tri.length);
+        if(!vector_push(&model->mesh, &mesh)) {
             printf("Error: could not push value to mesh vector\n");
             return -1;
         }
@@ -441,9 +441,9 @@ int64_t parse_lex(char *filename, Model *model, Texture *tex) {
         // printf("%08x %u %d %d %d\n", bone, bone, bone % 4, bone / 4, (bone/4)-184);
         // printf("% 4d  %02x %c \n", bone, bone, bone);
     // }
-    if(model->bone->length) printf("%llu weight groups\n", model->bone->length);
-    model->bone_count = MAX(model->bone->length, model->bone_count);
-    vector_free(&boneiv);
+    if(model->bone.length) printf("%llu weight groups\n", model->bone.length);
+    model->bone_count = MAX(model->bone.length, model->bone_count);
+    vector_cleanup(&boneiv);
     free(vv);
     free(vi);
     free(mem);
